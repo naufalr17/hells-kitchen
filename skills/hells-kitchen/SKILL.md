@@ -20,6 +20,7 @@ Optimal = right-sized spend per slice, never "every agent on the flagship model 
 1. **Judgment-critical** (architecture, security-sensitive code, gnarly bugs, hotfixes, deploys, final review/merge) → head chef cooks personally. Never delegate.
 2. **In-session subagents that inherit the parent model** (Claude Code Task tool, Hermes delegate_task, etc.) burn parent-priced tokens and bloat parent context. Use only for short read-only subtasks where spawn overhead exceeds the model-rate saving.
 3. **Meaty slice a lower tier can handle** → spawn a separate agent process at a cheaper model/effort, working directory set INSIDE its own git worktree, in the background. Each spawn is a fresh conversation — mixed models/efforts carry zero prompt-cache penalty. (Commands per agent: see Adapters.)
+   **Skill routing is a head-chef decision, like model and effort:** decide which skills the slice needs (stack conventions, test discipline, gate-mandated filters) and preload them at spawn when the agent supports it; otherwise name them in the brief as a load instruction. Never rely on a cheap worker at minimal reasoning to self-select skills — it is the agent least likely to load them.
 4. **Small tasks: don't spawn.** Spawn overhead is thousands of tokens before any work. The pattern wins only on meaty slices (a feature, a page, a module) and loses when writing the brief takes longer than doing the work.
 
 ## Model tiers (one billing pool per provider — tiering stretches it, parallelism only buys speed)
@@ -99,7 +100,7 @@ Route bulk into chefs; keep summaries in the parent thread, never raw payloads. 
 
 The pattern needs four primitives: **spawn headless** with a prompt, **pick model**, **pick reasoning effort**, **set working directory**. Flags drift between versions — verify against `--help` before relying on them.
 
-- **Hermes:** `hermes chat -q "<brief>" -m <model> --reasoning <none|minimal|low|medium|high>`, run with the worktree as working directory, in the background.
+- **Hermes:** `hermes chat -q "<brief>" -m <model> --reasoning <none|minimal|low|medium|high> -s <skill1,skill2>` (`-s` preloads skills), run with the worktree as working directory, in the background.
 - **Claude Code:** `claude -p "<brief>" --model <model> --worktree <name>` — worktree creation AND isolation enforcement are built in (file edits outside the worktree are blocked). In-session Task-tool subagents inherit the parent's billing context; prefer separate processes for tiering.
 - **Codex CLI:** `codex exec "<brief>" -m <model> -c model_reasoning_effort="<low|medium|high>"`, launched from the worktree directory.
 - **OpenCode:** `opencode run "<brief>" --model <provider/model>`, launched from the worktree directory.
