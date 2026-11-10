@@ -106,9 +106,24 @@ The pattern needs four primitives: **spawn headless** with a prompt, **pick mode
 - **OpenCode:** `opencode run "<brief>" --model <provider/model>`, launched from the worktree directory.
 - **Anything else:** any agent with a non-interactive mode + model flag can be a chef; the head chef only needs its exit, its diff, and its summary.
 
+## Real-engine QA (when a wave touches prompts, output validators or token caps)
+
+The test fake proves the plumbing, never the fitness of a rule or a prompt: a wave that changes model prompts, output validators or caps is green by construction, because the fake was written to satisfy the validators. Before declaring such a wave done, run the real model once end-to-end through the app (budget the cost), because that is where the failures live — and they are product-breaking, not cosmetic:
+
+- a prompt that grew past the output cap (every generation truncates; re-check the cap whenever the prompt asks for more text);
+- a validator that rejects most real drafts (the pool starves and the feature reads as "AI failed") — a rule on model output must encode the actual harm, not a proxy ("the correct answer is not clearly the longest", not "all options within ±25 %"), and every output filter logs its keep/drop ratio **per rule**, so the next starvation is one grep away;
+- structural metadata that a model fills on 28 of 30 nodes — null the missing field, reject only wrong values; rejecting the whole result for one gap throws away the paid call;
+- a word-list filter that collides with the domain (a "do not refer to the reading" rule that bans *text*/*author* kills every history question) — match phrasings, not words;
+- a cached-result reuse path keyed on the old inputs (a stored proposal returned for a different variant, a re-ask that drops the parameter that made it unique) — only a human clicking the new option finds it.
+
+Make the real-engine pass a slice of its own with a resumable runner (existing rows → fill only what is missing) that emits a report (counts, costs, links), so the stakeholder review is a file and a retry costs the remainder, not the whole budget.
+
 ## Pitfalls
 
 - Chef summaries are self-reports. A chef claiming "all tests pass" may have run nothing — the merge gate re-verifies, always.
 - Fake parallelism: slices that touch the same files serialize anyway; you pay spawn overhead for zero concurrency. The pre-dispatch gate exists for this.
 - An unbounded fix-loop at a cheap tier is a token incinerator that pressures the chef into rounding failure up to "done". Bound it (3 attempts) and reward honest blocker reports.
 - Changing which skills/plugins are installed usually edits the agent's system prompt and invalidates its prompt cache once — batch such changes, never spread them over a session.
+- A dev server with a file watcher is a shared resource: a long script that calls the local API dies with `fetch failed` the moment someone edits a watched source file. While such a run is in flight, edit only tests, docs or the other app; queue server edits for after.
+- Briefs that ask chefs for screenshots must name the port override literally. A dev script with a hard-coded port ignores `PORT=`; every chef's server dies with `EADDRINUSE` against the main checkout and "screenshots couldn't be captured" follows.
+- `pkill -f`/`pgrep -f` on a word that also appears in the command line issuing it kills that shell first (nothing after the kill runs). Kill by PID obtained in an earlier call.
